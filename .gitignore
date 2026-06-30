@@ -14,3 +14,16 @@ coverage/
 *.swp
 *.swo
 *~
+
+# Backend
+backend/.env
+backend/logs/
+backend/coverage/
+
+# Frontend
+frontend/.env
+frontend/dist/
+frontend/coverage/
+
+# Misc
+*.DS_Store
