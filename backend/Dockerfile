@@ -4,9 +4,9 @@ WORKDIR /app
 # Dependencies stage
 FROM base AS deps
 COPY package*.json ./
-RUN npm install --only=production
+RUN npm install --omit=dev
 
-# Build stage (development dependencies for potential build steps)
+# Build stage
 FROM base AS builder
 COPY package*.json ./
 RUN npm install
@@ -20,7 +20,8 @@ RUN addgroup --system --gid 1001 nodejs \
   && adduser --system --uid 1001 ultris
 
 COPY --from=deps /app/node_modules ./node_modules
-COPY --chown=ultris:nodejs . .
+COPY --from=builder --chown=ultris:nodejs /app/src ./src
+COPY --from=builder --chown=ultris:nodejs /app/package.json ./package.json
 
 USER ultris
 
