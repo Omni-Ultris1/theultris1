@@ -20,8 +20,7 @@ RUN addgroup --system --gid 1001 nodejs \
   && adduser --system --uid 1001 ultris
 
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=builder --chown=ultris:nodejs /app/src ./src
-COPY --from=builder --chown=ultris:nodejs /app/package.json ./package.json
+COPY --from=builder /app ./
 
 USER ultris
 
