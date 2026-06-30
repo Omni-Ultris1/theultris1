@@ -1,0 +1,21 @@
+[build]
+  command = "cd frontend && npm install && npm run build"
+  publish = "frontend/dist"
+  environment = { NODE_VERSION = "20" }
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[context.production.environment]
+  VITE_API_URL = "https://theultris1-prod.railway.app/api/v1"
+  VITE_STRIPE_PUBLIC_KEY = "pk_live_placeholder"
+
+[context.preview.environment]
+  VITE_API_URL = "https://theultris1-preview.railway.app/api/v1"
+  VITE_STRIPE_PUBLIC_KEY = "pk_test_placeholder"
+
+[context.develop.environment]
+  VITE_API_URL = "http://localhost:3000/api/v1"
+  VITE_STRIPE_PUBLIC_KEY = "pk_test_placeholder"
