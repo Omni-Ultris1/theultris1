@@ -1,32 +1,24 @@
-FROM node:20-alpine AS base
+# Use Node.js 18 as base image
+FROM node:18-alpine
+
+# Set working directory
 WORKDIR /app
 
-# Dependencies stage
-FROM base AS deps
+# Copy package files
 COPY package*.json ./
+
+# Install dependencies (production only)
 RUN npm install --omit=dev
 
-# Build stage
-FROM base AS builder
-COPY package*.json ./
-RUN npm install
+# Copy application code
 COPY . .
 
-# Production stage
-FROM base AS runner
-ENV NODE_ENV=production
-
-RUN addgroup --system --gid 1001 nodejs \
-  && adduser --system --uid 1001 ultris
-
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=builder /app ./
-
-USER ultris
-
+# Expose port
 EXPOSE 5000
 
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:5000/health', (r) => r.statusCode === 200 ? process.exit(0) : process.exit(1))"
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:5000/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"
 
-CMD ["node", "src/server.js"]
+# Start application
+CMD ["npm", "start"]
