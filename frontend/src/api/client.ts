@@ -39,50 +39,79 @@ const processQueue = (error: unknown, token: string | null = null) => {
   failedQueue = [];
 };
 
+const shouldAttemptRefresh = (error: AxiosError) => {
+  const originalRequest = error.config as (InternalAxiosRequestConfig & { _retry?: boolean }) | undefined;
+  const method = originalRequest?.method?.toUpperCase();
+  const url = originalRequest?.url || '';
+  const hasRefreshToken = !!localStorage.getItem('refreshToken');
+
+  if (error.response?.status !== 401 || originalRequest?._retry || !hasRefreshToken) {
+    return false;
+  }
+
+  if (url.includes('/auth/login') || url.includes('/auth/register') || url.includes('/auth/refresh')) {
+    return false;
+  }
+
+  if (!method || ['GET', 'HEAD'].includes(method)) {
+    return true;
+  }
+
+  const errorData = error.response?.data as { code?: string; message?: string } | undefined;
+  return errorData?.code === 'TOKEN_EXPIRED' || errorData?.message === 'Token expired';
+};
+
 apiClient.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      const errorData = error.response.data as { code?: string };
-      if (errorData?.code === 'TOKEN_EXPIRED' || error.response?.data) {
-        if (isRefreshing) {
-          return new Promise((resolve, reject) => {
-            failedQueue.push({ resolve, reject });
-          }).then((token) => {
-            originalRequest.headers.Authorization = 'Bearer ' + token;
-            return apiClient(originalRequest);
-          });
-        }
-
-        originalRequest._retry = true;
-        isRefreshing = true;
-
-        try {
-          const refreshToken = localStorage.getItem('refreshToken');
-          if (!refreshToken) throw new Error('No refresh token');
-
-          const response = await axios.post(`${BASE_URL}/auth/refresh`, { refreshToken }, { withCredentials: true });
-          const { accessToken, refreshToken: newRefreshToken } = response.data.data;
-
-          localStorage.setItem('accessToken', accessToken);
-          localStorage.setItem('refreshToken', newRefreshToken);
-
-          apiClient.defaults.headers.common.Authorization = 'Bearer ' + accessToken;
-          originalRequest.headers.Authorization = 'Bearer ' + accessToken;
-
-          processQueue(null, accessToken);
+    if (shouldAttemptRefresh(error)) {
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject });
+        }).then((token) => {
+          originalRequest.headers.Authorization = 'Bearer ' + token;
           return apiClient(originalRequest);
-        } catch (refreshError) {
-          processQueue(refreshError, null);
-          localStorage.removeItem('accessToken');
-          localStorage.removeItem('refreshToken');
-          window.dispatchEvent(new Event('auth:logout'));
-          return Promise.reject(refreshError);
-        } finally {
-          isRefreshing = false;
-        }
+        });
+      }
+
+      originalRequest._retry = true;
+      isRefreshing = true;
+
+      try {
+        const refreshToken = localStorage.getItem('refreshToken');
+        if (!refreshToken) throw new Error('No refresh token');
+
+        const response = await axios.post(
+          `${BASE_URL}/auth/refresh`,
+          { refreshToken },
+          {
+            withCredentials: true,
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Requested-With': 'XMLHttpRequest',
+            },
+          },
+        );
+        const { accessToken, refreshToken: newRefreshToken } = response.data.data;
+
+        localStorage.setItem('accessToken', accessToken);
+        localStorage.setItem('refreshToken', newRefreshToken);
+
+        apiClient.defaults.headers.common.Authorization = 'Bearer ' + accessToken;
+        originalRequest.headers.Authorization = 'Bearer ' + accessToken;
+
+        processQueue(null, accessToken);
+        return apiClient(originalRequest);
+      } catch (refreshError) {
+        processQueue(refreshError, null);
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+        window.dispatchEvent(new Event('auth:logout'));
+        return Promise.reject(refreshError);
+      } finally {
+        isRefreshing = false;
       }
     }
 
